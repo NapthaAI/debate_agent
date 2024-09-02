@@ -1,17 +1,22 @@
-name: template
-type: template
+name: debate_agent
+type: debate_agent
 author: naptha
 version: 0.1.0
-description: Base template for new tasks and flows.
+description: Debate agent.
 license: MIT
 
 models:
-  default_model_provider: ollama
+  default_model_provider: openai
   ollama: 
     model: ollama/phi
     max_tokens: 1000
     temperature: 0
     api_base: http://localhost:11434
+  openai:
+    model: gpt-4o
+    max_tokens: 1000
+    temperature: 0
+    api_base: https://api.openai.com/v1
 
 inputs:
     system_message: "You are a helpful AI assistant."
