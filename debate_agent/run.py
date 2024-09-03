@@ -15,6 +15,7 @@ init(autoreset=True)
 class Agent:
     def __init__(self, name: str):
         self.name = name
+        logger.info(f"Initializing Agent {self.name}...")
 
     def generate_message(self, context: List[ACLMessage], llm: 'LLM') -> ACLMessage:
         # Create a prompt for the LLM
@@ -42,12 +43,15 @@ class Agent:
     }}
     </acl>
     """
+        
+        logger.info(f"Prompt {prompt}...")
         response = llm.request(prompt)
+        logger.info(f"Response {response}...")
 
         message_data = parse_acl_response(response)
         if message_data:
             acl_msg = ACLMessage(**message_data)
-            print_colored_message(acl_msg)
+            logger.info(f"ACL message: {acl_msg}")
             return acl_msg
         return None
 
@@ -112,19 +116,10 @@ Respond in the format below with ACL JSON within XML tags. Do not use ```json ma
         message_data = parse_acl_response(response)
         if message_data:
             acl_msg = ACLMessage(**message_data)
-            print_colored_message(acl_msg)
+            logger.info(f"ACL message: {acl_msg}")
             return acl_msg
         return None
 
-def print_colored_message(message: ACLMessage):
-    color_map = {
-        ACLPerformative.PROPOSE: Fore.GREEN,
-        ACLPerformative.CHALLENGE: Fore.YELLOW,
-        ACLPerformative.VERIFY: Fore.CYAN,
-        ACLPerformative.CONFIRM: Fore.MAGENTA
-    }
-    color = color_map.get(message.performative, Fore.WHITE)
-    print(f"{color}{message.sender} ({message.performative.value}): {message.content}{Style.RESET_ALL}")
 
 def parse_acl_response(response: str) -> Dict[str, Any]:
     try:
@@ -167,9 +162,9 @@ def run(inputs, worker_nodes=None, orchestrator_node=None, flow_run=None, cfg=No
     llm = LLM(api_key, model_url, cfg)
 
     if inputs.agent_type == "debate":
-        agent = Agent("Agent_1")
+        agent = Agent(inputs.agent_name)
     elif inputs.agent_type == "vera":
-        agent = VeraAgent("VERA", llm)
+        agent = VeraAgent(inputs.agent_name, llm)
     else:
         print("Agent type unknown")
 

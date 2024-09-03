@@ -22,4 +22,5 @@ class ACLMessage(BaseModel):
 
 class InputSchema(BaseModel):
     conversation: List[ACLMessage] = Field(..., title="Conversation")
+    agent_name: str = Field(..., title="Agent name")
     agent_type: str = Field(..., title="Agent type")
