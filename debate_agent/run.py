@@ -154,8 +154,9 @@ def parse_acl_response(response: str) -> Dict[str, Any]:
             print(f"Extracted JSON: {acl_json}")
         return None
 
-def run(inputs, worker_nodes=None, orchestrator_node=None, flow_run=None, cfg=None):
+def run(inputs, *args, **kwargs):
     logger.info(f"Inputs: {inputs}")
+    cfg = kwargs["cfg"]
 
     api_key = None
     model_url = "https://api.openai.com/v1/chat/completions"
