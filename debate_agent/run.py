@@ -2,14 +2,17 @@
 from typing import List, Dict, Any
 from colorama import Fore, Style, init
 import json
+import logging
 from dotenv import load_dotenv
 from litellm import completion
-from naptha_sdk.utils import get_logger, load_yaml
+from naptha_sdk.utils import load_yaml
+from naptha_sdk.schemas import AgentRunInput
+
 from debate_agent.schemas import ACLMessage, ACLPerformative, InputSchema
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
+
 load_dotenv()
-# Initialize colorama
 init(autoreset=True)
 
 class Agent:
@@ -56,10 +59,8 @@ class Agent:
         return None
 
 class LLM:
-    def __init__(self, api_key: str, model_url: str, cfg=None):
-        self.api_key = api_key
-        self.model_url = model_url
-        self.cfg = cfg
+    def __init__(self, llm_config):
+        self.llm_config = llm_config
 
     def request(self, prompt: str) -> str:
 
@@ -68,14 +69,14 @@ class LLM:
             {"role": "user", "content": prompt}
         ]
 
-        default_model_provider = self.cfg["models"]["default_model_provider"]
-
+        if not isinstance(self.llm_config, dict):
+            self.llm_config = self.llm_config.model_dump()
         result = completion(
-            model=self.cfg["models"][default_model_provider]["model"],
+            model=self.llm_config["model"],
             messages=messages,
-            temperature=self.cfg["models"][default_model_provider]["temperature"],
-            max_tokens=self.cfg["models"][default_model_provider]["max_tokens"],
-            api_base=self.cfg["models"][default_model_provider]["api_base"],
+            temperature=self.llm_config["temperature"],
+            max_tokens=self.llm_config["max_tokens"],
+            api_base=self.llm_config["api_base"],
         ).choices[0].message.content
 
         return result
@@ -154,32 +155,44 @@ def parse_acl_response(response: str) -> Dict[str, Any]:
             print(f"Extracted JSON: {acl_json}")
         return None
 
-def run(inputs, *args, **kwargs):
-    logger.info(f"Inputs: {inputs}")
-    cfg = kwargs["cfg"]
+def run(agent_run: AgentRunInput, *args, **kwargs):
+    logger.info(f"Inputs: {agent_run.inputs}")
 
-    api_key = None
-    model_url = "https://api.openai.com/v1/chat/completions"
-    llm = LLM(api_key, model_url, cfg)
+    if isinstance(agent_run.inputs, dict):
+        agent_run.inputs = InputSchema(**agent_run.inputs)
 
-    if inputs.agent_type == "debate":
-        agent = Agent(inputs.agent_name)
-    elif inputs.agent_type == "vera":
-        agent = VeraAgent(inputs.agent_name, llm)
+    llm = LLM(agent_run.agent_deployment.agent_config.llm_config)
+
+    if agent_run.inputs.agent_type == "debate":
+        agent = Agent(agent_run.inputs.agent_name)
+    elif agent_run.inputs.agent_type == "vera":
+        agent = VeraAgent(agent_run.inputs.agent_name, llm)
     else:
         print("Agent type unknown")
 
-    message = agent.generate_message(inputs.conversation, llm)
+    message = agent.generate_message(agent_run.inputs.conversation, llm)
 
-    return message.json()
+    print(f"Message: {message}")
+    return message.model_dump()
 
 if __name__ == "__main__":
-    cfg_path = "debate_agent/component.yaml"
-    cfg = load_yaml(cfg_path)
+    agent_deployments_path = "debate_agent/configs/agent_deploymnets.json"
+    with open(agent_deployments_path, "r") as f:
+        agent_deployments = json.load(f)
 
-    api_key = None
-    model_url = "https://api.openai.com/v1/chat/completions"
-    llm = LLM(api_key, model_url)
+    llm_configs_path = "debate_agent/configs/llm_configs.json"
+    with open(llm_configs_path, "r") as f:
+        llm_configs = json.load(f)
+
+    agent_deployment = agent_deployments[0]
+    llm_config_name = agent_deployment["agent_config"]["llm_config"]["config_name"]
+
+    for config in llm_configs:
+        if config["config_name"] == llm_config_name:
+            llm_config = config
+            break
+    
+    agent_deployment["agent_config"]["llm_config"] = llm_config
 
     initial_claim = "Tesla's price will exceed $250 in 2 weeks."
     initial_message = ACLMessage(
@@ -191,12 +204,21 @@ if __name__ == "__main__":
             )
 
     conversation = []
-    conversation.append(initial_message)
+    conversation.append(initial_message.model_dump())
 
-    inputs = InputSchema(conversation=conversation, agent_type="debate")
+    inputs = {
+        "agent_name": "debate_agent",
+        "conversation": conversation,
+        "agent_type": "debate"
+    }
 
-    print(f"Conversation: {inputs.conversation}")
+    agent_run_input = AgentRunInput(
+        consumer_id="debate_agent",
+        inputs=inputs,
+        agent_deployment=agent_deployment
+    )
+    print(f"Agent run input: {agent_run_input}")
 
-    message = run(inputs, cfg=cfg)
+    message = run(agent_run_input)
 
     print("Message :", message)
